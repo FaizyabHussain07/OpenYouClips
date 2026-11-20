@@ -1,0 +1,6 @@
+{
+  "name": "SupoClip Studio",
+  "description": "AI viral video clipper, word-synced caption studio, 9:16 smart reframing, and visual clip editor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
