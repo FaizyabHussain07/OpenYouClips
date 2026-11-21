@@ -197,6 +197,7 @@ export function VideoPreviewPlayer({
             start: ytStart,
             end: ytEnd,
             controls: 0,
+            cc_load_policy: 0,
             rel: 0,
             modestbranding: 1,
             playsinline: 1,
@@ -583,7 +584,11 @@ export function VideoPreviewPlayer({
           <div
             className="pointer-events-none absolute inset-x-2 flex justify-center px-2"
             style={{
-              top: `${Math.round((captionStyle.positionY || 0.78) * 100)}%`,
+              top: `${Math.round(
+                (showHook
+                  ? Math.max(0.64, Math.min(0.84, captionStyle.positionY || 0.78))
+                  : Math.max(0.18, Math.min(0.86, captionStyle.positionY || 0.78))) * 100,
+              )}%`,
               transform: 'translateY(-50%)',
             }}
           >

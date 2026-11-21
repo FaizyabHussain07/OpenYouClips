@@ -213,8 +213,8 @@ export function generateAssSubtitleContent(params: {
   const outlineWidth = captionStyle.strokeWidth ?? 3;
   const borderStyle = captionStyle.background ? 3 : 1;
 
-  const hookFontSize = Math.round(24 * (width / 540));
-  const hookMarginV = Math.round(height * 0.12);
+  const hookFontSize = Math.round(22 * (width / 540));
+  const hookMarginV = Math.round(height * 0.07);
   const hookTextColor = hexToAssColor(hookBanner.textColor || '#FFFFFF', '00');
   const hookBackColor = hexToAssColor(hookBanner.bgColor || '#11141C', '20');
 
@@ -224,10 +224,11 @@ export function generateAssSubtitleContent(params: {
     `PlayResX: ${width}`,
     `PlayResY: ${height}`,
     'ScaledBorderAndShadow: yes',
+    'WrapStyle: 2',
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Caption,DejaVu Sans,${fontSize},${primaryColor},${highlightColor},${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${captionStyle.shadow ? 2 : 0},2,40,40,${marginV},1`,
+    `Style: Caption,DejaVu Sans,${fontSize},${primaryColor},${highlightColor},${outlineColor},${backColor},-1,0,0,0,100,100,0,0,${borderStyle},${outlineWidth},${captionStyle.shadow ? 2 : 0},2,44,44,${marginV},1`,
     `Style: HookBanner,DejaVu Sans,${hookFontSize},${hookTextColor},${hookTextColor},${hookBackColor},${hookBackColor},-1,0,0,0,100,100,0,0,3,8,0,8,48,48,${hookMarginV},1`,
     '',
     '[Events]',
@@ -241,12 +242,27 @@ export function generateAssSubtitleContent(params: {
     );
   }
 
-  for (const chunk of chunks) {
-    const startStr = formatAssTime(Math.max(0, chunk.start));
-    const endStr = formatAssTime(Math.max(chunk.start + 0.2, chunk.end));
+  let prevCueEnd = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const cueStart = Math.max(prevCueEnd, Math.max(0, chunk.start));
+    const nextStart = i + 1 < chunks.length ? chunks[i + 1].start : Number.POSITIVE_INFINITY;
+    const rawCueEnd = Math.max(cueStart + 0.18, chunk.end);
+    const cueEnd = Math.max(cueStart + 0.1, Math.min(rawCueEnd, nextStart - 0.01));
+    prevCueEnd = cueEnd;
+
+    const totalCs = Math.max(10, Math.round((cueEnd - cueStart) * 100));
+    const rawTotalCs = chunk.words.reduce(
+      (sum, w) => sum + Math.max(10, Math.round((w.end - w.start) * 100)),
+      0,
+    );
+    const scale = rawTotalCs > 0 ? totalCs / rawTotalCs : 1;
+
+    const startStr = formatAssTime(cueStart);
+    const endStr = formatAssTime(cueEnd);
     const wordParts = chunk.words.map((w) => {
       const display = captionStyle.uppercase ? w.word.toUpperCase() : w.word;
-      const csDur = Math.max(10, Math.round((w.end - w.start) * 100));
+      const csDur = Math.max(8, Math.round(Math.max(10, (w.end - w.start) * 100) * scale));
       return `{\\kf${csDur}}${escapeAssText(display)}`;
     });
     lines.push(`Dialogue: 1,${startStr},${endStr},Caption,,0,0,0,,${wordParts.join(' ')}`);

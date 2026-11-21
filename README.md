@@ -2,14 +2,14 @@
 
 **OpenYouClips** is a free, open-source AI viral video clipper, word-synced caption studio, 9:16 smart reframing workbench, and creator export pack tool — designed as a self-hostable alternative to paid short-form clipping platforms with **zero login walls** and **local browser session persistence**.
 
-Paste any YouTube URL or upload a long-form video (`.mp4`, `.mov`, `.webm`, `.mkv`) to extract **up to 10–15 non-overlapping viral clips**, edit captions & framing in a visual NLE Studio, export individual `.mp4` videos, or download a complete creator `.zip` bundle.
+Paste any YouTube URL or upload a long-form video (`.mp4`, `.mov`, `.webm`, `.mkv`) to extract **up to 20–25+ non-overlapping viral clips**, edit clean word-synced captions & framing in a visual NLE Studio, export individual `.mp4` videos, or download a complete creator `.zip` bundle.
 
 ---
 
 ## Key Features
 
 - **No Login / Direct Dashboard**: Opens straight into the creator workspace with no accounts, paywalls, or database sign-up barriers.
-- **Up to 10–15 Viral Clips per Video**: Multi-pass AI highlight detection scans the entire video timeline to surface up to **10–15 non-overlapping clips** (for videos longer than 7 minutes), ranked with a 4-dimension Virality Score (`Hook`, `Engagement`, `Value`, `Shareability`, scored `/100`).
+- **Up to 20–25+ Viral Clips per Long Video**: Multi-window AI timeline scanning mines every segment of long videos (podcasts, streams, keynotes, vlogs) to extract up to **20–25+ non-overlapping YouTube Shorts / TikTok / Reels clips**, ranked with a 4-dimension Virality Score (`Hook`, `Engagement`, `Value`, `Shareability`, scored `/100`).
 - **Live 5-Agent Execution Trace**: Real-time transparent pipeline telemetry showing every agent stage:
   1. `Ingest & Metadata Agent` — Resolves YouTube metadata, chapters, captions, or uploaded file streams via FFprobe.
   2. `Transcript & ASR Agent` — Extracts timed captions or transcribes spoken audio via Gemini (`gemini-3.5-transcribe`).

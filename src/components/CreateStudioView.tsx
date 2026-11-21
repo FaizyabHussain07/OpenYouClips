@@ -159,8 +159,9 @@ export function CreateStudioView({
             Turn long videos into viral shorts
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
-            Paste a YouTube or video link, or upload an MP4. OpenYouClips extracts up to 10–15 viral
-            clips per video, scores 4 virality axes, reframes to 9:16, and saves everything locally in your browser.
+            Paste a YouTube or video link, or upload an MP4. OpenYouClips extracts up to 20–25+
+            monetization-ready viral clips per long video with clean non-overlapping captions,
+            4-axis virality scoring, and full .zip download.
           </p>
         </div>
 

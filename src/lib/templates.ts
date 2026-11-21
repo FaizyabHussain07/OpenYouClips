@@ -228,7 +228,7 @@ export const WORKFLOW_OPTIONS: Array<{
   label: string;
   summary: string;
 }> = [
-  { id: 'highlights', label: 'Viral Highlights', summary: 'Ranks up to 10–15 highest-scoring standalone hooks' },
+  { id: 'highlights', label: 'Viral Highlights', summary: 'Ranks up to 20–25+ highest-retention monetization hooks' },
   { id: 'series', label: 'Multi-Part Series', summary: 'Splits narrative into sequential Part 1..N clips' },
   { id: 'topic', label: 'Topic Focus', summary: 'Finds every segment discussing your target topic' },
   { id: 'recap', label: 'Tight Recap', summary: 'Condenses core argument into a high-density recap' },

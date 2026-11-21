@@ -13,7 +13,7 @@ export type PersistedScreenState =
   | { view: 'editor'; projectId: string; clipId: string };
 
 export interface PersistedWorkspacePayload {
-  version: 1;
+  version: 1 | 2;
   projects: ClipProject[];
   defaultTemplate: CaptionTemplateId;
   lastScreen?: PersistedScreenState;
@@ -43,6 +43,25 @@ function compactProjectsForQuota(projects: ClipProject[], limitCount = 12): Clip
   });
 }
 
+function migrateLegacyAutoHookBanners(projects: ClipProject[]): ClipProject[] {
+  return projects.map((p) => ({
+    ...p,
+    clips: (p.clips ?? []).map((c) => {
+      if (
+        c.hookBanner?.enabled &&
+        c.hookBanner.text === c.hookTitle &&
+        c.hookBanner.durationSeconds === 3.5
+      ) {
+        return {
+          ...c,
+          hookBanner: { ...c.hookBanner, enabled: false },
+        };
+      }
+      return c;
+    }),
+  }));
+}
+
 export function loadWorkspaceFromStorage(
   storage: StorageLike | null = getDefaultStorage(),
 ): PersistedWorkspacePayload | null {
@@ -52,9 +71,13 @@ export function loadWorkspaceFromStorage(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedWorkspacePayload>;
     if (!Array.isArray(parsed.projects)) return null;
+    const projects =
+      parsed.version === 2
+        ? parsed.projects
+        : migrateLegacyAutoHookBanners(parsed.projects);
     return {
-      version: 1,
-      projects: parsed.projects,
+      version: 2,
+      projects,
       defaultTemplate: parsed.defaultTemplate ?? 'hormozi',
       lastScreen: parsed.lastScreen,
       savedAt: parsed.savedAt ?? new Date().toISOString(),
@@ -70,7 +93,7 @@ export function saveWorkspaceToStorage(
 ): boolean {
   if (!storage) return false;
   const fullPayload: PersistedWorkspacePayload = {
-    version: 1,
+    version: 2,
     projects: payload.projects,
     defaultTemplate: payload.defaultTemplate,
     lastScreen: payload.lastScreen,

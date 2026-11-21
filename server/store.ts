@@ -257,7 +257,7 @@ async function createSeedProjects(): Promise<ClipProject[]> {
         autoCenterSpeaker: true,
       },
       hookBanner: {
-        enabled: true,
+        enabled: false,
         text: c.hookTitle,
         bgColor: '#11141C',
         textColor: '#FFFFFF',
@@ -355,7 +355,7 @@ async function createSeedProjects(): Promise<ClipProject[]> {
         autoCenterSpeaker: true,
       },
       hookBanner: {
-        enabled: true,
+        enabled: false,
         text: c.hookTitle,
         bgColor: '#FF3B5C',
         textColor: '#FFFFFF',
@@ -445,6 +445,26 @@ export async function initStore(): Promise<void> {
               p.stageMessage = 'Pipeline stopped';
               p.errorMessage = 'Processing was interrupted by a server restart. Click Retry Analysis to resume.';
               changed = true;
+            }
+            for (const c of p.clips ?? []) {
+              if (
+                c.hookBanner?.enabled &&
+                c.hookBanner.text === c.hookTitle &&
+                c.hookBanner.durationSeconds === 3.5
+              ) {
+                c.hookBanner.enabled = false;
+                changed = true;
+              }
+              if (p.transcript?.length > 0 && c.words?.length > 0) {
+                const normalized = buildWordTokensFromLines(
+                  p.transcript,
+                  c.startSeconds,
+                  c.endSeconds,
+                );
+                if (normalized.length > 0) {
+                  c.words = normalized;
+                }
+              }
             }
           }
           state = parsed;

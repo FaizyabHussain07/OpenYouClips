@@ -218,16 +218,24 @@ export function buildWordTokensFromLines(
   clipStartSeconds: number,
   clipEndSeconds: number,
 ): WordToken[] {
-  const relevant = lines.filter(
-    (l) => l.endSeconds > clipStartSeconds && l.startSeconds < clipEndSeconds,
-  );
+  const relevant = lines
+    .filter((l) => l.endSeconds > clipStartSeconds && l.startSeconds < clipEndSeconds)
+    .sort((a, b) => a.startSeconds - b.startSeconds);
   const tokens: WordToken[] = [];
+  let prevEnd = 0;
 
   for (const line of relevant) {
-    const segStart = Math.max(clipStartSeconds, line.startSeconds) - clipStartSeconds;
-    const segEnd = Math.min(clipEndSeconds, line.endSeconds) - clipStartSeconds;
+    const rawSegStart = Math.max(clipStartSeconds, line.startSeconds) - clipStartSeconds;
+    const rawSegEnd = Math.min(clipEndSeconds, line.endSeconds) - clipStartSeconds;
     const rawWords = line.text.trim().split(/\s+/).filter(Boolean);
-    if (!rawWords.length || segEnd <= segStart) continue;
+    if (!rawWords.length || rawSegEnd <= 0) continue;
+
+    // Enforce strict non-overlapping monotonic timeline so overlapping transcript lines
+    // never stack on screen at the same instant.
+    const segStart = Math.max(prevEnd, rawSegStart);
+    const minSpan = Math.min(rawWords.length * 0.22, 1.4);
+    const segEnd = Math.max(segStart + 0.15, Math.min(clipEndSeconds - clipStartSeconds, Math.max(rawSegEnd, segStart + minSpan)));
+    if (segEnd <= segStart) continue;
 
     const totalChars = rawWords.reduce((acc, w) => acc + Math.max(1, w.length), 0);
     let cursor = segStart;
@@ -248,6 +256,7 @@ export function buildWordTokensFromLines(
       });
       cursor = end;
     }
+    prevEnd = segEnd;
   }
 
   return tokens;
@@ -265,17 +274,22 @@ export function groupWordsIntoCaptionLines(
 ): CaptionChunk[] {
   const size = Math.max(1, Math.min(8, Math.round(maxWordsPerLine || 4)));
   const chunks: CaptionChunk[] = [];
+  let prevEnd = 0;
+
   for (let i = 0; i < words.length; i += size) {
     const slice = words.slice(i, i + size).map((w, offset) => ({
       ...w,
       globalIndex: i + offset,
     }));
     if (slice.length > 0) {
+      const start = Math.max(prevEnd, slice[0].start);
+      const end = Math.max(start + 0.12, slice[slice.length - 1].end);
       chunks.push({
         words: slice,
-        start: slice[0].start,
-        end: slice[slice.length - 1].end,
+        start: Number(start.toFixed(3)),
+        end: Number(end.toFixed(3)),
       });
+      prevEnd = end;
     }
   }
   return chunks;
@@ -285,8 +299,13 @@ export function findActiveCaptionAtTime(
   chunks: CaptionChunk[],
   localTimeSeconds: number,
 ): { chunk: CaptionChunk | null; activeWordIndex: number } {
-  for (const chunk of chunks) {
-    if (localTimeSeconds >= chunk.start - 0.05 && localTimeSeconds <= chunk.end + 0.15) {
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const nextStart = i + 1 < chunks.length ? chunks[i + 1].start : chunk.end + 0.15;
+    const windowStart = i === 0 ? Math.max(0, chunk.start - 0.04) : chunk.start;
+    const windowEnd = Math.min(nextStart, chunk.end + 0.12);
+
+    if (localTimeSeconds >= windowStart && localTimeSeconds < windowEnd) {
       let activeWordIndex = chunk.words[0]?.globalIndex ?? -1;
       for (const w of chunk.words) {
         if (localTimeSeconds >= w.start - 0.02) {
@@ -361,10 +380,17 @@ export function formatSrtTimestamp(seconds: number): string {
 
 export function buildSrtFromWords(words: WordToken[], wordsPerLine = 4): string {
   const chunks = groupWordsIntoCaptionLines(words, wordsPerLine);
+  let prevEnd = 0;
   return chunks
     .map((c, idx) => {
+      const start = Math.max(prevEnd, c.start);
+      const nextStart = idx + 1 < chunks.length ? chunks[idx + 1].start : Number.POSITIVE_INFINITY;
+      const rawEnd = Math.max(start + 0.15, c.end);
+      const end = Math.min(rawEnd, nextStart - 0.01);
+      const safeEnd = Math.max(start + 0.08, end);
+      prevEnd = safeEnd;
       const text = c.words.map((w) => w.word).join(' ');
-      return `${idx + 1}\n${formatSrtTimestamp(c.start)} --> ${formatSrtTimestamp(Math.max(c.start + 0.25, c.end))}\n${text}\n`;
+      return `${idx + 1}\n${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(safeEnd)}\n${text}\n`;
     })
     .join('\n');
 }
@@ -374,9 +400,45 @@ export function computeTargetClipCount(durationSeconds: number): { min: number; 
   if (safeDur <= 120) {
     return { min: 3, max: 6 };
   }
-  if (safeDur <= 420) {
-    return { min: 6, max: 10 };
+  if (safeDur <= 300) {
+    return { min: 6, max: 12 };
   }
-  return { min: 10, max: 15 };
+  if (safeDur <= 600) {
+    return { min: 12, max: 18 };
+  }
+  if (safeDur <= 1200) {
+    return { min: 18, max: 25 };
+  }
+  return { min: 22, max: 28 };
 }
+
+export interface TimelineWindow {
+  index: number;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export function buildTimeWindows(
+  durationSeconds: number,
+  maxWindows = 5,
+): TimelineWindow[] {
+  const safeDur = Math.max(30, Math.round(Number(durationSeconds) || 60));
+  if (safeDur < 240 || maxWindows <= 1) {
+    return [{ index: 0, startSeconds: 0, endSeconds: safeDur }];
+  }
+
+  const desiredWindows = safeDur >= 1500 ? Math.min(maxWindows, 5) : safeDur >= 720 ? Math.min(maxWindows, 4) : 3;
+  const step = Math.ceil(safeDur / desiredWindows);
+  const windows: TimelineWindow[] = [];
+
+  for (let i = 0; i < desiredWindows; i++) {
+    const startSeconds = Math.max(0, i * step - (i > 0 ? 15 : 0));
+    const endSeconds = i === desiredWindows - 1 ? safeDur : Math.min(safeDur, (i + 1) * step + 10);
+    if (endSeconds > startSeconds + 20) {
+      windows.push({ index: i, startSeconds, endSeconds });
+    }
+  }
+  return windows;
+}
+
 

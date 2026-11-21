@@ -467,6 +467,14 @@ async function runProjectPipeline(params: {
         clipLength: project.clipLength,
         topicFocus: project.topicFocus,
         customInstructions: project.customInstructions,
+        onProgressNotice: (notice) => {
+          setAgentStep(project, 'virality_scout', 'running', notice);
+          update({
+            stage: 'analyzing_virality',
+            progress: 72,
+            stageMessage: notice,
+          });
+        },
       });
 
       const topScore = analysis.segments.reduce((m, s) => Math.max(m, s.virality.totalScore), 0);
@@ -501,7 +509,7 @@ async function runProjectPipeline(params: {
       keyTopics: analysis.keyTopics,
     });
 
-    const clips: ClipItem[] = [];
+    const clips: ClipItem[] = new Array(analysis.segments.length);
     const sourceTotalDuration = (await probeVideoDuration(sourceVideoPath)) || project.durationSeconds;
     let totalWordTokens = 0;
 
@@ -512,74 +520,82 @@ async function runProjectPipeline(params: {
       `Assembling ${analysis.segments.length} studio clip timelines and media tracks…`,
     );
 
-    for (let i = 0; i < analysis.segments.length; i++) {
-      const seg = analysis.segments[i];
-      const clipId = uid('clip');
-      const clipPath = path.join(CLIPS_DIR, `${clipId}.mp4`);
+    let sliceCursor = 0;
+    const sliceConcurrency = Math.min(3, Math.max(1, analysis.segments.length));
+    await Promise.all(
+      Array.from({ length: sliceConcurrency }, async () => {
+        while (true) {
+          const i = sliceCursor++;
+          if (i >= analysis.segments.length) break;
+          const seg = analysis.segments[i];
+          const clipId = uid('clip');
+          const clipPath = path.join(CLIPS_DIR, `${clipId}.mp4`);
 
-      // Clamp slice timestamp inside the actual playable source file duration
-      const clipDur = Math.max(4, seg.endSeconds - seg.startSeconds);
-      const sliceStart =
-        seg.startSeconds + clipDur <= sourceTotalDuration
-          ? seg.startSeconds
-          : Math.max(0, sourceTotalDuration - clipDur);
+          // Clamp slice timestamp inside the actual playable source file duration
+          const clipDur = Math.max(4, seg.endSeconds - seg.startSeconds);
+          const sliceStart =
+            seg.startSeconds + clipDur <= sourceTotalDuration
+              ? seg.startSeconds
+              : Math.max(0, sourceTotalDuration - clipDur);
 
-      await sliceClipFromSource(sourceVideoPath, clipPath, sliceStart, clipDur);
+          await sliceClipFromSource(sourceVideoPath, clipPath, sliceStart, clipDur);
 
-      const words = buildWordTokensFromLines(
-        project.transcript,
-        seg.startSeconds,
-        seg.endSeconds,
-      );
-      totalWordTokens += words.length;
+          const words = buildWordTokensFromLines(
+            project.transcript,
+            seg.startSeconds,
+            seg.endSeconds,
+          );
+          totalWordTokens += words.length;
 
-      clips.push({
-        id: clipId,
-        projectId: project.id,
-        clipOrder: i + 1,
-        startTime: seg.startTime,
-        endTime: seg.endTime,
-        startSeconds: seg.startSeconds,
-        endSeconds: seg.endSeconds,
-        duration: Math.round(clipDur),
-        trimStartOffset: 0,
-        trimEndOffset: 0,
-        hookTitle: seg.hookTitle,
-        text: seg.text,
-        reasoning: seg.reasoning,
-        virality: seg.virality,
-        workflowRole: seg.workflowRole,
-        partNumber: seg.partNumber,
-        words,
-        captionStyle: getCaptionTemplate(project.captionTemplate),
-        framing: {
-          outputFormat: project.outputFormat,
-          panX: 0,
-          panY: 0,
-          zoom: 1,
-          autoCenterSpeaker: true,
-        },
-        hookBanner: {
-          enabled: true,
-          text: seg.hookTitle,
-          bgColor: '#11141C',
-          textColor: '#FFFFFF',
-          durationSeconds: 3.5,
-        },
-        effects: {
-          cutLongPauses: true,
-          pauseThresholdMs: 1200,
-          removeFillerWords: true,
-          volume: 1,
-          brightness: 0,
-          contrast: 1,
-          saturation: 1,
-          fadeInSeconds: 0.2,
-          fadeOutSeconds: 0.3,
-        },
-        videoUrl: `/media/clips/${clipId}.mp4`,
-      });
-    }
+          clips[i] = {
+            id: clipId,
+            projectId: project.id,
+            clipOrder: i + 1,
+            startTime: seg.startTime,
+            endTime: seg.endTime,
+            startSeconds: seg.startSeconds,
+            endSeconds: seg.endSeconds,
+            duration: Math.round(clipDur),
+            trimStartOffset: 0,
+            trimEndOffset: 0,
+            hookTitle: seg.hookTitle,
+            text: seg.text,
+            reasoning: seg.reasoning,
+            virality: seg.virality,
+            workflowRole: seg.workflowRole,
+            partNumber: seg.partNumber,
+            words,
+            captionStyle: getCaptionTemplate(project.captionTemplate),
+            framing: {
+              outputFormat: project.outputFormat,
+              panX: 0,
+              panY: 0,
+              zoom: 1,
+              autoCenterSpeaker: true,
+            },
+            hookBanner: {
+              enabled: false,
+              text: seg.hookTitle,
+              bgColor: '#11141C',
+              textColor: '#FFFFFF',
+              durationSeconds: 3.5,
+            },
+            effects: {
+              cutLongPauses: true,
+              pauseThresholdMs: 1200,
+              removeFillerWords: true,
+              volume: 1,
+              brightness: 0,
+              contrast: 1,
+              saturation: 1,
+              fadeInSeconds: 0.2,
+              fadeOutSeconds: 0.3,
+            },
+            videoUrl: `/media/clips/${clipId}.mp4`,
+          };
+        }
+      }),
+    );
 
     setAgentStep(
       project,

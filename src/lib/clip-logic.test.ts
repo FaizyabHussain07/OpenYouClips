@@ -15,6 +15,7 @@ import {
   formatSrtTimestamp,
   buildSrtFromWords,
   computeTargetClipCount,
+  buildTimeWindows,
 } from './clip-logic';
 
 test('parseVideoSource extracts YouTube IDs across watch, shorts, and youtu.be', () => {
@@ -72,21 +73,26 @@ test('dedupeOverlappingSegments keeps higher virality clip when overlap exceeds 
   );
 });
 
-test('word token building, caption chunking, and active word lookup align with time', () => {
+test('word token building enforces strictly monotonic non-overlapping timing even on overlapping transcript cues', () => {
   const lines = [
-    { startTime: '0:10', endTime: '0:16', startSeconds: 10, endSeconds: 16, text: 'One two three four five six' },
+    { startTime: '0:10', endTime: '0:16', startSeconds: 10, endSeconds: 16, text: 'One two three' },
+    { startTime: '0:13', endTime: '0:19', startSeconds: 13, endSeconds: 19, text: 'Four five six' },
   ];
-  const words = buildWordTokensFromLines(lines, 10, 16);
+  const words = buildWordTokensFromLines(lines, 10, 20);
   assert.equal(words.length, 6);
-  assert.equal(words[0].start, 0);
-  assert.equal(words[5].end, 6);
+  for (let i = 1; i < words.length; i++) {
+    assert.ok(words[i].start >= words[i - 1].end - 0.001);
+  }
 
   const chunks = groupWordsIntoCaptionLines(words, 3);
   assert.equal(chunks.length, 2);
+  assert.ok(chunks[1].start >= chunks[0].end - 0.001);
 
-  const active = findActiveCaptionAtTime(chunks, 3.5);
-  assert.ok(active.chunk);
-  assert.ok(active.activeWordIndex >= 3);
+  const active1 = findActiveCaptionAtTime(chunks, 1.5);
+  assert.equal(active1.chunk?.words[0].word, 'One');
+
+  const active2 = findActiveCaptionAtTime(chunks, chunks[1].start + 0.5);
+  assert.equal(active2.chunk?.words[0].word, 'Four');
 });
 
 test('clampTrimRange and splitWordsAtTime enforce minimum duration and shift split timestamps', () => {
@@ -107,7 +113,7 @@ test('clampTrimRange and splitWordsAtTime enforce minimum duration and shift spl
   assert.equal(split.secondHalf[0].end, 3);
 });
 
-test('formatSrtTimestamp and buildSrtFromWords produce valid SRT subtitle cues', () => {
+test('formatSrtTimestamp and buildSrtFromWords produce non-overlapping valid SRT subtitle cues', () => {
   assert.equal(formatSrtTimestamp(65.432), '00:01:05,432');
   const srt = buildSrtFromWords(
     [
@@ -119,8 +125,14 @@ test('formatSrtTimestamp and buildSrtFromWords produce valid SRT subtitle cues',
   assert.match(srt, /^1\n00:00:00,000 --> 00:00:01,200\nHello world/);
 });
 
-test('computeTargetClipCount scales target clips up to 10-15 on long videos', () => {
+test('computeTargetClipCount and buildTimeWindows scale up to 20-28 clips across full timeline', () => {
   assert.deepEqual(computeTargetClipCount(90), { min: 3, max: 6 });
-  assert.deepEqual(computeTargetClipCount(300), { min: 6, max: 10 });
-  assert.deepEqual(computeTargetClipCount(1400), { min: 10, max: 15 });
+  assert.deepEqual(computeTargetClipCount(300), { min: 6, max: 12 });
+  assert.deepEqual(computeTargetClipCount(900), { min: 18, max: 25 });
+  assert.deepEqual(computeTargetClipCount(1800), { min: 22, max: 28 });
+
+  const windows = buildTimeWindows(1800, 5);
+  assert.equal(windows.length, 5);
+  assert.equal(windows[0].startSeconds, 0);
+  assert.equal(windows[windows.length - 1].endSeconds, 1800);
 });
